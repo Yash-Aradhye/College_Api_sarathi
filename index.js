@@ -4,7 +4,7 @@ const serverless = require("serverless-http")
 const app = express()
 
 app.use(express.json())
-//test
+//te
 
 app.get("/", (req, res) => {
     res.send("hello, world! from college")
