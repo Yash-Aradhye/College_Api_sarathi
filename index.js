@@ -7,7 +7,7 @@ app.use(express.json())
 //test
 
 app.get("/", (req, res) => {
-    res.send("hello, world! from college_api")
+    res.send("hello, world! from college")
 })
 
 app.get("/health", (req, res) => {
