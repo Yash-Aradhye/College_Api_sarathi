@@ -4,32 +4,40 @@ on:
   push:
     branches: [ main ]
     paths:
-      - '/'
+      - '/**'
       - '.github/workflows/deploy.yml'
 
-      
+
 jobs:
-  deploy:
+  echo:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Echo
+        run: echo "Hello World"
+  # deploy:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v3
       
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '18'
+  #     - name: Setup Node.js
+  #       uses: actions/setup-node@v3
+  #       with:
+  #         node-version: '18'
           
-      - name: Install Dependencies
-        working-directory: ./
-        run: npm install
+  #     - name: Install Dependencies
+  #       working-directory: ./
+  #       run: npm install
         
-      - name: Run Tests
-        working-directory: ./
-        run: npm test
+  #     - name: Run Tests
+  #       working-directory: ./
+  #       run: npm test
         
-      - name: Deploy to AWS
-        working-directory: ./
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        run: npx serverless deploy --stage prod
+  #     - name: Deploy to AWS
+  #       working-directory: ./
+  #       env:
+  #         AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  #         AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  #       run: npx serverless deploy --stage prod
