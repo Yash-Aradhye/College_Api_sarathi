@@ -31,6 +31,14 @@ class CutoffController {
       res.status(404).json({ error: error.message });
     }
   }
+  async getCutoffByInstituteCode(req, res) {
+    try {
+      const cutoff = await CutoffService.getCutoffByInstituteCode(req.params.instituteCode);
+      res.status(200).json(cutoff);
+    } catch (error) {
+      res.status(404).json({ error: error.message });
+    }
+  }
 
   async updateCutoff(req, res) {
     try {

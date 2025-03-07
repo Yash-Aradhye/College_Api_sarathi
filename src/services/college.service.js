@@ -39,6 +39,7 @@ class CollegeService {
       }
 
       const snapshot = await query.get();
+      
       const colleges = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
@@ -148,6 +149,9 @@ class CollegeService {
             )
           );
 
+          console.dir(college, { depth: null });
+          
+
           const nameMatch = college.instituteName.toLowerCase()
             .includes(criteria.instituteName.toLowerCase());
 
@@ -170,6 +174,8 @@ class CollegeService {
         }
       };
     } catch (error) {
+      console.log(error);
+      
       throw new Error(`Error searching colleges: ${error.message}`);
     }
   }

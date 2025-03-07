@@ -7,6 +7,7 @@ router.post('/', cutoffController.addCutoff);
 router.get('/', cutoffController.getAllCutoffs);
 router.get('/search', cutoffController.searchCutoffs);
 router.get('/:id', cutoffController.getCutoffById);
+router.get('/institute/:instituteCode', cutoffController.getCutoffByInstituteCode);
 router.put('/:id', cutoffController.updateCutoff);
 router.delete('/:id', cutoffController.deleteCutoff);
 

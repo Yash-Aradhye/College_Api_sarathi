@@ -2,7 +2,7 @@ import { db } from '../../config/firebase.js';
 
 class CutoffService {
   constructor() {
-    this.collection = db.collection('cutoffs');
+    this.collection = db.collection('cutoffs_v2');
   }
 
   async addCutoff(cutoffData) {
@@ -64,6 +64,18 @@ class CutoffService {
         throw new Error('Cutoff not found');
       }
       return { id: doc.id, ...doc.data() };
+    } catch (error) {
+      throw new Error(`Error getting cutoff: ${error.message}`);
+    }
+  }
+  
+  async getCutoffByInstituteCode(code) {
+    try {
+      const snapshot = await this.collection.where('instituteCode', '==', parseInt(code)).get();
+      if (!snapshot.docs.length) {
+        throw new Error('Cutoff not found');
+      }
+      return { total:snapshot.docs.length ,data: snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) };
     } catch (error) {
       throw new Error(`Error getting cutoff: ${error.message}`);
     }
