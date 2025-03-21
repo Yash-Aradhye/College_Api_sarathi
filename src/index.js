@@ -7,6 +7,10 @@ const app = express();
 app.use(json());
 app.use(cors());
 // Use college routes
+app.get("/", (req, res) => {
+  res.send("Welcome to the college-cutoff API")
+})
+
 app.use('/api/colleges', collegeRoutes);
 app.use('/api/cutoffs', cutoffRoutes);
 
