@@ -1,4 +1,6 @@
 import { db } from '../../config/firebase.js';
+import redis from '../config/redisClient.js';
+import { CACHE_KEYS, CACHE_TTL } from '../config/constants.js';
 
 class CutoffService {
   constructor() {
@@ -20,7 +22,14 @@ class CutoffService {
   }
 
   async getAllCutoffs(page = 1, limit = 10, lastDocId = null) {
+    const cacheKey = `${CACHE_KEYS.CUTOFF_LIST}:${page}:${limit}:${lastDocId}`;
     try {
+      // Try to get from cache
+      const cached = await redis.get(cacheKey);
+      if (cached) {
+        return JSON.parse(cached);
+      }
+
       let query = this.collection;
       const pageSize = parseInt(limit);
       const startAt = parseInt(page);
@@ -45,25 +54,40 @@ class CutoffService {
       const lastVisible = snapshot.docs[snapshot.docs.length - 1];
       const nextPageId = lastVisible ? lastVisible.id : null;
 
-      return {
+      const result = {
         cutoffs,
         nextPageId,
         currentPage: startAt,
         pageSize,
         hasMore: cutoffs.length === pageSize
       };
+
+      // Cache the result
+      await redis.setex(cacheKey, CACHE_TTL.ONE_DAY, JSON.stringify(result));
+      return result;
     } catch (error) {
       throw new Error(`Error getting cutoffs: ${error.message}`);
     }
   }
 
   async getCutoffById(id) {
+    const cacheKey = `${CACHE_KEYS.CUTOFF_DETAIL}${id}`;
     try {
+      // Try to get from cache
+      const cached = await redis.get(cacheKey);
+      if (cached) {
+        return JSON.parse(cached);
+      }
+
       const doc = await this.collection.doc(id).get();
       if (!doc.exists) {
         throw new Error('Cutoff not found');
       }
-      return { id: doc.id, ...doc.data() };
+      const result = { id: doc.id, ...doc.data() };
+
+      // Cache the result
+      await redis.setex(cacheKey, CACHE_TTL.ONE_HOUR, JSON.stringify(result));
+      return result;
     } catch (error) {
       throw new Error(`Error getting cutoff: ${error.message}`);
     }
@@ -118,24 +142,33 @@ class CutoffService {
     try {
       let query = this.collection;
 
+      console.log(criteria);
+      
+
       if (criteria.collegeId) {
-        query = query.where('collegeId', '==', criteria.collegeId);
+        query = query.where('instituteCode', '==', criteria.collegeId);
       }
-      if (criteria.year) {
-        query = query.where('year', '==', criteria.year);
-      }
+      // if (criteria.year) {
+      //   query = query.where('year', '==', criteria.year);
+      // }
       if (criteria.round) {
-        query = query.where('round', '==', criteria.round);
+        query = query.where('capRound', '==', criteria.round);
       }
       if (criteria.category) {
-        query = query.where('category', '==', criteria.category);
+        query = query.where('Category', '==', criteria.category);
       }
 
       const snapshot = await query.get();
+      console.log(snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })));
       return snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       }));
+      
+      
     } catch (error) {
       throw new Error(`Error searching cutoffs: ${error.message}`);
     }

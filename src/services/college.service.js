@@ -1,8 +1,10 @@
 import { db } from '../../config/firebase.js';
+import redis from '../config/redisClient.js';
+import { CACHE_KEYS, CACHE_TTL } from '../config/constants.js';
 
 class CollegeService {
   constructor() {
-    this.collection = db.collection('colleges');
+    this.collection = db.collection('colleges_v3');
   }
 
   // Add a new college
@@ -22,7 +24,15 @@ class CollegeService {
 
   // Get all colleges
   async getAllColleges(page = 1, limit = 10, lastDocId = null) {
+    const cacheKey = `${CACHE_KEYS.COLLEGE_LIST}:${page}:${limit}:${lastDocId}`;
     try {
+      // Try to get from cache
+      const cached = await redis.get(cacheKey);
+      if (cached) {
+        return JSON.parse(cached);
+      }
+
+      // If not in cache, get from database
       let query = this.collection;
       const pageSize = parseInt(limit);
       const startAt = parseInt(page);
@@ -48,13 +58,17 @@ class CollegeService {
       const lastVisible = snapshot.docs[snapshot.docs.length - 1];
       const nextPageId = lastVisible ? lastVisible.id : null;
 
-      return {
+      const result = {
         colleges,
         nextPageId,
         currentPage: startAt,
         pageSize,
         hasMore: colleges.length === pageSize
       };
+
+      // Cache the result
+      await redis.setex(cacheKey, CACHE_TTL.ONE_DAY, JSON.stringify(result));
+      return result;
     } catch (error) {
       throw new Error(`Error getting colleges: ${error.message}`);
     }
@@ -62,12 +76,23 @@ class CollegeService {
 
   // Get college by ID
   async getCollegeById(id) {
+    const cacheKey = `${CACHE_KEYS.COLLEGE_DETAIL}${id}`;
     try {
+      // Try to get from cache
+      const cached = await redis.get(cacheKey);
+      if (cached) {
+        return JSON.parse(cached);
+      }
+
       const doc = await this.collection.doc(id).get();
       if (!doc.exists) {
         throw new Error('College not found');
       }
-      return { id: doc.id, ...doc.data() };
+      const result = { id: doc.id, ...doc.data() };
+      
+      // Cache the result
+      await redis.setex(cacheKey, CACHE_TTL.ONE_HOUR, JSON.stringify(result));
+      return result;
     } catch (error) {
       throw new Error(`Error getting college: ${error.message}`);
     }
@@ -85,7 +110,12 @@ class CollegeService {
       
       await docRef.update(updateData);
       const updatedDoc = await docRef.get();
-      return { id: updatedDoc.id, ...updatedDoc.data() };
+      const result = { id: updatedDoc.id, ...updatedDoc.data() };
+
+      // Invalidate caches
+      await redis.del(`${CACHE_KEYS.COLLEGE_DETAIL}${id}`);
+      await redis.del(CACHE_KEYS.COLLEGE_LIST + '*');
+      return result;
     } catch (error) {
       throw new Error(`Error updating college: ${error.message}`);
     }
@@ -102,7 +132,12 @@ class CollegeService {
       }
       
       await docRef.delete();
-      return { id, message: 'College deleted successfully' };
+      const result = { id, message: 'College deleted successfully' };
+
+      // Invalidate caches
+      await redis.del(`${CACHE_KEYS.COLLEGE_DETAIL}${id}`);
+      await redis.del(CACHE_KEYS.COLLEGE_LIST + '*');
+      return result;
     } catch (error) {
       throw new Error(`Error deleting college: ${error.message}`);
     }
@@ -110,7 +145,14 @@ class CollegeService {
 
   // Search colleges by various criteria
   async searchColleges(criteria) {
+    const cacheKey = `${CACHE_KEYS.COLLEGE_SEARCH}${JSON.stringify(criteria)}`;
     try {
+      // Try to get from cache
+      const cached = await redis.get(cacheKey);
+      if (cached) {
+        return JSON.parse(cached);
+      }
+
       let query = this.collection;
       const page = parseInt(criteria.page) || 1;
       const limit = parseInt(criteria.limit) || 10;
@@ -163,7 +205,7 @@ class CollegeService {
       const totalResults = results.length;
       const paginatedResults = results.slice(startIndex, startIndex + limit);
 
-      return {
+      const result = {
         colleges: paginatedResults,
         pagination: {
           total: totalResults,
@@ -173,6 +215,10 @@ class CollegeService {
           hasMore: startIndex + limit < totalResults
         }
       };
+
+      // Cache the result
+      await redis.setex(cacheKey, CACHE_TTL.ONE_DAY, JSON.stringify(result));
+      return result;
     } catch (error) {
       console.log(error);
       
