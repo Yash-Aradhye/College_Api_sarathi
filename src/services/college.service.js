@@ -4,7 +4,7 @@ import { CACHE_KEYS, CACHE_TTL } from '../config/constants.js';
 
 class CollegeService {
   constructor() {
-    this.collection = db.collection('colleges_v3');
+    this.collection = db.collection('colleges_v4');
   }
 
   // Add a new college
