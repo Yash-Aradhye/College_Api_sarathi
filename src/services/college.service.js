@@ -149,7 +149,8 @@ class CollegeService {
     try {
       // Try to get from cache
       const cached = await redis.get(cacheKey);
-      if (cached) {
+      if (false) {
+        console.log('Cache hit for search:', cacheKey);
         return JSON.parse(cached);
       }
 
@@ -158,21 +159,11 @@ class CollegeService {
       const limit = parseInt(criteria.limit) || 10;
       const startIndex = (page - 1) * limit;
 
-      // Handle non-text based filters first
-      if (criteria.year) {
-        query = query.where('year', '==', criteria.year);
-      }
-      if (criteria.instituteCode) {
-        query = query.where('instituteCode', '==', criteria.instituteCode);
-      }
-      if (criteria.category) {
-        query = query.where('category', '==', criteria.category);
-      }
-      if (criteria.branchName) {
-        query = query.where('branchName', '==', criteria.branchName);
-      }
       if (criteria.city) {
         query = query.where('city', '==', criteria.city);
+      }
+      if(criteria.status){
+        query = query.where('additionalMetadata.status', '==', criteria.status); 
       }
 
       const snapshot = await query.get();
@@ -191,7 +182,6 @@ class CollegeService {
             )
           );
 
-          console.dir(college, { depth: null });
           
 
           const nameMatch = college.instituteName.toLowerCase()
