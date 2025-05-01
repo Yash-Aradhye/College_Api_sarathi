@@ -7,6 +7,8 @@ const router = Router();
 router.post('/', collegeController.addCollege);
 router.get('/', collegeController.getAllColleges);
 router.get('/search', collegeController.searchColleges);
+router.get('/version', collegeController.getCollegeVersion);
+router.get('/updates', collegeController.getCollegeUpdates);
 router.get('/:id', collegeController.getCollegeById);
 router.put('/:id', collegeController.updateCollege);
 router.delete('/:id', collegeController.deleteCollege);

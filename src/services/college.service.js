@@ -5,6 +5,8 @@ import { CACHE_KEYS, CACHE_TTL } from '../config/constants.js';
 class CollegeService {
   constructor() {
     this.collection = db.collection('colleges_v4');
+    this.college_updates = db.collection('college_updates');
+    this.metadata = db.collection('metadata');
   }
 
   // Add a new college
@@ -213,6 +215,70 @@ class CollegeService {
       console.log(error);
       
       throw new Error(`Error searching colleges: ${error.message}`);
+    }
+  }
+
+  // Get the current version of college data
+  async getCollegeVersion() {
+    const cacheKey = `${CACHE_KEYS.COLLEGE_VERSION}`;
+    try {
+      // Try to get from cache
+      const cached = await redis.get(cacheKey);
+      if (cached) {
+        return JSON.parse(cached);
+      }
+
+      // Get version from metadata collection
+      const metadataDoc = await this.metadata.doc('colleges').get();
+      
+      if (!metadataDoc.exists) {
+        // If no metadata document exists, create one with version 1
+        const versionData = { version: '1' };
+        await this.metadata.doc('colleges').set(versionData);
+        
+        // Cache the result
+        await redis.setex(cacheKey, CACHE_TTL.ONE_HOUR, JSON.stringify(versionData));
+        return versionData;
+      }
+      
+      const versionData = metadataDoc.data();
+      
+      // Cache the result
+      await redis.setex(cacheKey, CACHE_TTL.ONE_HOUR, JSON.stringify(versionData));
+      return versionData;
+    } catch (error) {
+      throw new Error(`Error getting college version: ${error.message}`);
+    }
+  }
+
+  // Get college updates between versions
+  async getCollegeUpdates(fromVersion, toVersion) {
+    const cacheKey = `${CACHE_KEYS.COLLEGE_UPDATES}:${fromVersion}:${toVersion}`;
+    try {
+      // Try to get from cache
+      const cached = await redis.get(cacheKey);
+      if (cached) {
+        return JSON.parse(cached);
+      }
+
+      // Get updates from college_updates collection
+      let query = this.college_updates
+        .where('version', '>', fromVersion)
+        .where('version', '<=', toVersion)
+        .orderBy('version');
+      
+      const snapshot = await query.get();
+      
+      const updates = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      
+      // Cache the result
+      await redis.setex(cacheKey, CACHE_TTL.ONE_HOUR, JSON.stringify(updates));
+      return updates;
+    } catch (error) {
+      throw new Error(`Error getting college updates: ${error.message}`);
     }
   }
 }

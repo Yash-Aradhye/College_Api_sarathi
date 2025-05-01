@@ -70,6 +70,33 @@ class CollegeController {
       res.status(400).json({ error: error.message });
     }
   }
+
+  // Get college version
+  async getCollegeVersion(req, res) {
+    try {
+      const versionData = await CollegeService.getCollegeVersion();
+      res.status(200).json(versionData);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  // Get college updates
+  async getCollegeUpdates(req, res) {
+    try {
+      const fromVersion = req.query.from || '0';
+      const toVersion = req.query.to;
+      
+      if (!toVersion) {
+        return res.status(400).json({ error: 'Missing required parameter: to' });
+      }
+      
+      const updates = await CollegeService.getCollegeUpdates(fromVersion, toVersion);
+      res.status(200).json(updates);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
 }
 
 export default new CollegeController();

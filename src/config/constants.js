@@ -4,7 +4,9 @@ export const CACHE_KEYS = {
   COLLEGE_SEARCH: 'colleges:search:',
   CUTOFF_LIST: 'cutoffs:list',
   CUTOFF_DETAIL: 'cutoffs:detail:',
-  CUTOFF_SEARCH: 'cutoffs:search:'
+  CUTOFF_SEARCH: 'cutoffs:search:',
+  COLLEGE_VERSION: 'colleges:version',
+  COLLEGE_UPDATES: 'colleges:updates'
 };
 
 export const CACHE_TTL = {
