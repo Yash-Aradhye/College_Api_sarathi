@@ -46,19 +46,18 @@ jobs:
 
     - name: Create deployment package
       run: |
-        # Create a clean directory for deployment
-        mkdir -p deploy
+        # Create a temporary directory for deployment
+        mkdir -p /tmp/deploy
         
         # Copy necessary files to the deployment directory
-        # Using cp instead of rsync to avoid the file changing issue
-        cp -R ./* deploy/
-        cp .env deploy/
+        cp -R * /tmp/deploy/ || true
+        cp .env /tmp/deploy/ || true
         
         # Remove unnecessary files
-        rm -rf deploy/.git deploy/.github deploy/node_modules
+        rm -rf /tmp/deploy/.git /tmp/deploy/.github /tmp/deploy/node_modules
         
         # Create archive from deployment directory
-        tar -czf deploy.tar.gz -C deploy .
+        tar -czf deploy.tar.gz -C /tmp/deploy .
 
     - name: Deploy to EC2
       run: |
