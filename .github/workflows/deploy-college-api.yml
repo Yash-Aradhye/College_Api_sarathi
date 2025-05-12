@@ -44,30 +44,52 @@ jobs:
         echo "  User ${{ secrets.EC2_USER }}" >> ~/.ssh/config
         echo "  StrictHostKeyChecking no" >> ~/.ssh/config
 
+    - name: Create deployment package
+      run: |
+        # Create a clean directory for deployment
+        mkdir -p deploy
+        
+        # Copy necessary files to the deployment directory
+        # Using cp instead of rsync to avoid the file changing issue
+        cp -R ./* deploy/
+        cp .env deploy/
+        
+        # Remove unnecessary files
+        rm -rf deploy/.git deploy/.github deploy/node_modules
+        
+        # Create archive from deployment directory
+        tar -czf deploy.tar.gz -C deploy .
+
     - name: Deploy to EC2
       run: |
-        # Create deployment package
-        tar -czf deploy.tar.gz --exclude=node_modules --exclude=.git --exclude=.github .
-        
         # Copy files to EC2
-        scp deploy.tar.gz ec2-instance:/tmp/
+        scp deploy.tar.gz ec2-instance:~/counselling/Backend/deploy.tar.gz
         
         # Execute remote deployment script
-        ssh ec2-instance '
-          mkdir -p ~/counselling/Backend/College_api
-          cd ~/counselling/Backend/College_api
+        ssh ec2-instance "
+          cd ~/counselling/Backend
           
-          # Extract and setup
-          tar -xzf /tmp/deploy.tar.gz -C .
-          rm /tmp/deploy.tar.gz
+          # Debug - show current directory and files
+          pwd
+          ls -la
+          
+          # Create directory if it doesn't exist
+          mkdir -p College_api
+          
+          # Extract files - use absolute path to be sure
+          tar -xzf ~/counselling/Backend/deploy.tar.gz -C College_api
           
           # Install dependencies
+          cd College_api
           npm ci --production
           
           # Restart service using PM2
-          if pm2 list | grep -q "college-api"; then
+          if pm2 list | grep -q \"college-api\"; then
             pm2 restart college-api
           else
-            pm2 start src/index.js --name "college-api"
+            pm2 start src/index.js --name \"college-api\"
           fi
-        '
+          
+          # Remove the tar file after successful deployment
+          rm ~/counselling/Backend/deploy.tar.gz
+        "

@@ -1,12 +1,12 @@
 #!/bin/bash
 
 # Update system
-sudo apt-get update
-sudo apt-get upgrade -y
+sudo dnf update -y
+sudo dnf upgrade -y
 
 # Install Node.js and npm
-curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-sudo apt-get install -y nodejs
+# Using dnf for Amazon Linux 2023
+sudo dnf install -y nodejs npm
 
 # Install PM2 globally
 sudo npm install -g pm2
