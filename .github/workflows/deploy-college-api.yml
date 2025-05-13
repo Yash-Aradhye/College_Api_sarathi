@@ -1,4 +1,4 @@
-name: Deploy College API to AWS EC2
+name: Deploy College API to AWS EC2 with HTTPS
 
 on:
   push:
@@ -22,7 +22,7 @@ jobs:
 
     - name: Create .env file
       run: |
-        echo "PORT=${{ secrets.PORT }}" >> .env
+        echo "PORT=3002" >> .env  # Keep the original port 3002 for College API
         echo "FIREBASE_PROJECT_ID=${{ secrets.FIREBASE_PROJECT_ID }}" >> .env
         echo "FIREBASE_PRIVATE_KEY=${{ secrets.FIREBASE_PRIVATE_KEY }}" >> .env
         echo "FIREBASE_CLIENT_EMAIL=${{ secrets.FIREBASE_CLIENT_EMAIL }}" >> .env
@@ -30,6 +30,8 @@ jobs:
         echo "REDIS_PORT=${{ secrets.REDIS_PORT }}" >> .env
         echo "REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}" >> .env
         echo "REDIS_URL=${{ secrets.REDIS_URL }}" >> .env
+        # Add domain name as environment variable
+        echo "DOMAIN_NAME=${{ secrets.DOMAIN_NAME }}" >> .env
 
     - name: Set up SSH key
       uses: webfactory/ssh-agent@v0.7.0
@@ -57,12 +59,13 @@ jobs:
         rm -rf /tmp/deploy/.git /tmp/deploy/.github /tmp/deploy/node_modules
         
         # Create archive from deployment directory
-        tar -czf deploy.tar.gz -C /tmp/deploy .
+        cd /tmp
+        tar -czf deploy.tar.gz -C deploy .
 
     - name: Deploy to EC2
       run: |
         # Copy files to EC2
-        scp deploy.tar.gz ec2-instance:~/counselling/Backend/deploy.tar.gz
+        scp /tmp/deploy.tar.gz ec2-instance:~/counselling/Backend/deploy.tar.gz
         
         # Execute remote deployment script
         ssh ec2-instance "
@@ -82,12 +85,113 @@ jobs:
           cd College_api
           npm ci --production
           
-          # Restart service using PM2
+          # Set up SSL certificate (only if needed)
+          if [ ! -d \"/etc/letsencrypt/live/${{ secrets.DOMAIN_NAME }}\" ]; then
+            sudo dnf update -y
+            sudo dnf install -y certbot
+            sudo certbot certonly --standalone -d ${{ secrets.DOMAIN_NAME }} -d www.${{ secrets.DOMAIN_NAME }} --non-interactive --agree-tos -m ${{ secrets.SSL_EMAIL }}
+          fi
+          
+          # Create cert directory in app folder
+          mkdir -p ~/counselling/Backend/College_api/certs
+          
+          # Copy SSL certificates to app directory with correct permissions
+          sudo cp /etc/letsencrypt/live/${{ secrets.DOMAIN_NAME }}/privkey.pem ~/counselling/Backend/College_api/certs/
+          sudo cp /etc/letsencrypt/live/${{ secrets.DOMAIN_NAME }}/fullchain.pem ~/counselling/Backend/College_api/certs/
+          
+          # Fix permissions so app user can read the certificates
+          sudo chown ec2-user:ec2-user ~/counselling/Backend/College_api/certs/*
+          sudo chmod 600 ~/counselling/Backend/College_api/certs/*
+          
+          # Create HTTPS config using the copied certificates
+          echo 'import fs from \"fs\";
+                import path from \"path\";
+                import { fileURLToPath } from \"url\";
+
+                const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+                const certPath = path.join(__dirname, \"certs\");
+
+                const httpsConfig = {
+                  key: fs.readFileSync(path.join(certPath, \"privkey.pem\")),
+                  cert: fs.readFileSync(path.join(certPath, \"fullchain.pem\"))
+                };
+
+                export default httpsConfig;' > ~/counselling/Backend/College_api/https-config.js
+          
+          # Install and configure Nginx as a reverse proxy
+          echo 'Installing and configuring Nginx...'
+          sudo dnf install nginx -y
+          
+          # Create the nginx config file directly with a simple echo approach
+          # Store domain name in a variable
+          DOMAIN=\"${{ secrets.DOMAIN_NAME }}\"
+          
+          # Create the file using direct string concatenation - HTTP server block
+          echo \"server {\" | sudo tee /etc/nginx/conf.d/college-api.conf > /dev/null
+          echo \"    listen 80;\" | sudo tee -a /etc/nginx/conf.d/college-api.conf > /dev/null
+          echo \"    server_name \$DOMAIN www.\$DOMAIN;\" | sudo tee -a /etc/nginx/conf.d/college-api.conf > /dev/null
+          echo \"    # Redirect all HTTP requests to HTTPS\" | sudo tee -a /etc/nginx/conf.d/college-api.conf > /dev/null
+          echo \"    location / {\" | sudo tee -a /etc/nginx/conf.d/college-api.conf > /dev/null
+          echo \"        return 301 https://\\\$host\\\$request_uri;\" | sudo tee -a /etc/nginx/conf.d/college-api.conf > /dev/null
+          echo \"    }\" | sudo tee -a /etc/nginx/conf.d/college-api.conf > /dev/null
+          echo \"}\" | sudo tee -a /etc/nginx/conf.d/college-api.conf > /dev/null
+          echo \"\" | sudo tee -a /etc/nginx/conf.d/college-api.conf > /dev/null
+          
+          # HTTPS server block
+          echo \"server {\" | sudo tee -a /etc/nginx/conf.d/college-api.conf > /dev/null
+          echo \"    listen 443 ssl;\" | sudo tee -a /etc/nginx/conf.d/college-api.conf > /dev/null
+          echo \"    server_name \$DOMAIN www.\$DOMAIN;\" | sudo tee -a /etc/nginx/conf.d/college-api.conf > /dev/null
+          echo \"    # SSL certificate configuration\" | sudo tee -a /etc/nginx/conf.d/college-api.conf > /dev/null
+          echo \"    ssl_certificate /etc/letsencrypt/live/\$DOMAIN/fullchain.pem;\" | sudo tee -a /etc/nginx/conf.d/college-api.conf > /dev/null
+          echo \"    ssl_certificate_key /etc/letsencrypt/live/\$DOMAIN/privkey.pem;\" | sudo tee -a /etc/nginx/conf.d/college-api.conf > /dev/null
+          echo \"    # SSL settings\" | sudo tee -a /etc/nginx/conf.d/college-api.conf > /dev/null
+          echo \"    ssl_protocols TLSv1.2 TLSv1.3;\" | sudo tee -a /etc/nginx/conf.d/college-api.conf > /dev/null
+          echo \"    ssl_prefer_server_ciphers on;\" | sudo tee -a /etc/nginx/conf.d/college-api.conf > /dev/null
+          echo \"    ssl_ciphers ECDHE-RSA-AES256-GCM-SHA512:DHE-RSA-AES256-GCM-SHA512:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA384;\" | sudo tee -a /etc/nginx/conf.d/college-api.conf > /dev/null
+          echo \"    ssl_session_timeout 10m;\" | sudo tee -a /etc/nginx/conf.d/college-api.conf > /dev/null
+          echo \"    ssl_session_cache shared:SSL:10m;\" | sudo tee -a /etc/nginx/conf.d/college-api.conf > /dev/null
+          echo \"    ssl_session_tickets off;\" | sudo tee -a /etc/nginx/conf.d/college-api.conf > /dev/null
+          echo \"    # Pass all requests to your Node.js application\" | sudo tee -a /etc/nginx/conf.d/college-api.conf > /dev/null
+          echo \"    location / {\" | sudo tee -a /etc/nginx/conf.d/college-api.conf > /dev/null
+          echo \"        proxy_pass http://localhost:3002;\" | sudo tee -a /etc/nginx/conf.d/college-api.conf > /dev/null
+          echo \"        proxy_http_version 1.1;\" | sudo tee -a /etc/nginx/conf.d/college-api.conf > /dev/null
+          echo \"        proxy_set_header Upgrade \\\$http_upgrade;\" | sudo tee -a /etc/nginx/conf.d/college-api.conf > /dev/null
+          echo \"        proxy_set_header Connection 'upgrade';\" | sudo tee -a /etc/nginx/conf.d/college-api.conf > /dev/null
+          echo \"        proxy_set_header Host \\\$host;\" | sudo tee -a /etc/nginx/conf.d/college-api.conf > /dev/null
+          echo \"        proxy_set_header X-Real-IP \\\$remote_addr;\" | sudo tee -a /etc/nginx/conf.d/college-api.conf > /dev/null
+          echo \"        proxy_set_header X-Forwarded-For \\\$proxy_add_x_forwarded_for;\" | sudo tee -a /etc/nginx/conf.d/college-api.conf > /dev/null
+          echo \"        proxy_set_header X-Forwarded-Proto \\\$scheme;\" | sudo tee -a /etc/nginx/conf.d/college-api.conf > /dev/null
+          echo \"        proxy_cache_bypass \\\$http_upgrade;\" | sudo tee -a /etc/nginx/conf.d/college-api.conf > /dev/null
+          echo \"    }\" | sudo tee -a /etc/nginx/conf.d/college-api.conf > /dev/null
+          echo \"}\" | sudo tee -a /etc/nginx/conf.d/college-api.conf > /dev/null
+          
+          # Test Nginx configuration and restart
+          sudo nginx -t && sudo systemctl enable nginx && sudo systemctl restart nginx
+          
+          # Make sure SELinux allows Nginx to proxy connections (if SELinux is enabled)
+          sudo setsebool -P httpd_can_network_connect 1
+          
+          # Check for ecosystem config and handle it if present
+          if [ -f \"ecosystem.config.js\" ]; then
+            # Copy ecosystem config if it doesn't exist in the target directory
+            cp ecosystem.config.js College_api/ 2>/dev/null || true
+          fi
+          
+          cd ~/counselling/Backend/College_api/
+          
+          # Ensure your index.js is using PORT from .env
+          grep -q 'PORT = process.env.PORT' src/index.js || echo \"Warning: Please ensure your app is configured to use process.env.PORT!\"
+          
+          # Restart or start PM2 process
           if pm2 list | grep -q \"college-api\"; then
-            pm2 restart college-api
+            pm2 restart college-api --update-env
           else
             pm2 start src/index.js --name \"college-api\"
           fi
+          
+          # Set up SSL renewal cron job with certificate copy after renewal
+          (crontab -l 2>/dev/null; echo \"0 3 * * * sudo certbot renew --quiet && sudo cp /etc/letsencrypt/live/${{ secrets.DOMAIN_NAME }}/privkey.pem ~/counselling/Backend/College_api/certs/ && sudo cp /etc/letsencrypt/live/${{ secrets.DOMAIN_NAME }}/fullchain.pem ~/counselling/Backend/College_api/certs/ && sudo chown ec2-user:ec2-user ~/counselling/Backend/College_api/certs/* && sudo chmod 600 ~/counselling/Backend/College_api/certs/* && sudo systemctl reload nginx && cd ~/counselling/Backend/College_api && pm2 restart college-api\") | sort - | uniq - | crontab -
           
           # Remove the tar file after successful deployment
           rm ~/counselling/Backend/deploy.tar.gz
